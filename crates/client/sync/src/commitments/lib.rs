@@ -226,18 +226,21 @@ fn contract_trie_root<B: BlockT>(
     let identifier = bonsai_identifier::CONTRACT;
     bonsai_contract.init_tree(identifier)?;
 
-    let start_update_storage = Instant::now(); // Start timing for storage updates
+    let start_update_storage = Instant::now();
 
     for (contract_address, updates) in csd.storage_updates.iter() {
         update_storage_trie(contract_address, updates, &bonsai_contract_storage);
     }
 
-    let duration_update_storage = start_update_storage.elapsed(); // End timing and calculate duration
-    log::info!("Update storage trie for {block_number}: {:?}", duration_update_storage); // Log the duration
+    let duration_update_storage = start_update_storage.elapsed();
+    log::info!("Update storage trie for {block_number}: {:?}", duration_update_storage);
 
+    let start_commit = Instant::now();
+    let duration_commit = start_commit.elapsed();
     bonsai_contract_storage.lock().unwrap().commit(BasicId::new(block_number))?;
+    log::info!("Commit of storage trie root for block {}: {:?}", block_number, duration_commit);
 
-    let start_compute_leaf_hash = Instant::now(); // Start timing for computing leaf hashes
+    let start_compute_leaf_hash = Instant::now();
 
     for contract_address in csd.storage_updates.iter() {
         let class_commitment_leaf_hash =
@@ -247,8 +250,8 @@ fn contract_trie_root<B: BlockT>(
         bonsai_contract.insert(identifier, &key, &class_commitment_leaf_hash.into())?;
     }
 
-    let duration_compute_leaf_hash = start_compute_leaf_hash.elapsed(); // End timing and calculate duration
-    log::info!("Compute leaf hash for {block_number}: {:?}", duration_compute_leaf_hash); // Log the duration
+    let duration_compute_leaf_hash = start_compute_leaf_hash.elapsed();
+    log::info!("Compute leaf hash for {block_number}: {:?}", duration_compute_leaf_hash);
 
     let start_commit = Instant::now();
     bonsai_contract.commit(BasicId::new(block_number))?;
