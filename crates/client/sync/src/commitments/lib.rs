@@ -233,7 +233,7 @@ fn contract_trie_root<B: BlockT>(
     }
 
     let duration_update_storage = start_update_storage.elapsed(); // End timing and calculate duration
-    log::info!("Time taken for update_storage_trie: {:?}", duration_update_storage); // Log the duration
+    log::info!("Update storage trie for {block_number}: {:?}", duration_update_storage); // Log the duration
 
     bonsai_contract_storage.lock().unwrap().commit(BasicId::new(block_number))?;
 
@@ -248,9 +248,12 @@ fn contract_trie_root<B: BlockT>(
     }
 
     let duration_compute_leaf_hash = start_compute_leaf_hash.elapsed(); // End timing and calculate duration
-    log::info!("Time taken for compute leaf hash: {:?}", duration_compute_leaf_hash); // Log the duration
+    log::info!("Compute leaf hash for {block_number}: {:?}", duration_compute_leaf_hash); // Log the duration
 
+    let start_commit = Instant::now();
     bonsai_contract.commit(BasicId::new(block_number))?;
+    let duration_commit = start_commit.elapsed();
+    log::info!("Contract trie root updated for block {}: {:?}", block_number, duration_commit);
     Ok(bonsai_contract.root_hash(identifier)?.into())
 }
 
