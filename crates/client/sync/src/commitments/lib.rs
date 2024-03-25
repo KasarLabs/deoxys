@@ -236,8 +236,8 @@ fn contract_trie_root<B: BlockT>(
     log::info!("Update storage trie for {block_number}: {:?}", duration_update_storage);
 
     let start_commit = Instant::now();
-    let duration_commit = start_commit.elapsed();
     bonsai_contract_storage.lock().unwrap().commit(BasicId::new(block_number))?;
+    let duration_commit = start_commit.elapsed();
     log::info!("Commit of storage trie root for block {}: {:?}", block_number, duration_commit);
 
     let start_compute_leaf_hash = Instant::now();
