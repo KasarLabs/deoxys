@@ -94,6 +94,7 @@ use starknet_api::hash::{StarkFelt, StarkHash};
 use starknet_api::state::StorageKey;
 use starknet_api::transaction::{Calldata, Event as StarknetEvent, Fee, MessageToL1, TransactionHash};
 use starknet_crypto::FieldElement;
+use std::time::Instant;
 use transaction_validation::TxPriorityInfo;
 
 use crate::alloc::string::ToString;
@@ -181,18 +182,26 @@ pub mod pallet {
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         /// The block is being finalized.
         fn on_finalize(_n: BlockNumberFor<T>) {
+            let start = Instant::now();
+        
             assert!(SeqAddrUpdate::<T>::take(), "Sequencer address must be set for the block");
+        
             // Create a new Starknet block and store it.
             <Pallet<T>>::store_block(UniqueSaturatedInto::<u64>::unique_saturated_into(
                 frame_system::Pallet::<T>::block_number(),
             ));
+        
+            let duration = start.elapsed();
+            log::info!("on_finalize took {:?}", duration);
         }
-
+        
         /// The block is being initialized. Implement to have something happen.
         fn on_initialize(_: BlockNumberFor<T>) -> Weight {
+            let start = Instant::now();
+            
             let digest = frame_system::Pallet::<T>::digest();
             let logs = digest.logs();
-
+        
             if !logs.is_empty() {
                 for log_entry in logs {
                     if let DigestItem::PreRuntime(engine_id, encoded_data) = log_entry {
@@ -204,7 +213,10 @@ pub mod pallet {
                     }
                 }
             }
-
+        
+            let duration = start.elapsed();
+            log::info!("on_initialize took {:?}", duration);
+        
             Weight::zero()
         }
 

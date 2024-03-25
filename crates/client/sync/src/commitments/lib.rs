@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Instant;
 
 use bitvec::order::Msb0;
 use bitvec::vec::BitVec;
@@ -172,7 +173,12 @@ pub fn update_state_root<B: BlockT>(
     block_number: u64,
     substrate_block_hash: Option<H256>,
 ) -> Felt252Wrapper {
+    let start = Instant::now(); // Start timing the function
+
+    log::info!("Starting update_state_root for block {}", block_number);
+
     // Update contract and its storage tries
+    let contract_trie_start = Instant::now(); // Timing for contract trie update
     let contract_trie_root = contract_trie_root(
         &csd,
         overrides,
@@ -183,11 +189,18 @@ pub fn update_state_root<B: BlockT>(
     )
     .expect("Failed to compute contract root");
 
+    log::info!("Contract trie root updated for block {}: {:?}", block_number, contract_trie_start.elapsed());
+
     // Update class trie
+    let class_trie_start = Instant::now(); // Timing for class trie update
     let class_trie_root =
         class_trie_root(&csd, bonsai_class.lock().unwrap(), block_number).expect("Failed to compute class root");
 
-    calculate_state_root::<PoseidonHasher>(contract_trie_root, class_trie_root)
+    log::info!("Class trie root updated for block {}: {:?}", block_number, class_trie_start.elapsed());
+
+    let state_root = calculate_state_root::<PoseidonHasher>(contract_trie_root, class_trie_root);
+
+    state_root
 }
 
 /// Calculates the contract trie root

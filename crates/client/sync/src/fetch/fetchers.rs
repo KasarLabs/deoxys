@@ -1,5 +1,6 @@
 //! Contains the code required to fetch data from the network efficiently.
 use std::sync::Arc;
+use std::time::Instant;
 
 use itertools::Itertools;
 use mc_storage::OverrideHandle;
@@ -64,27 +65,32 @@ where
     const MAX_RETRY: u32 = 15;
     let mut attempt = 0;
     let base_delay = Duration::from_secs(1);
+    let start = Instant::now(); // Start timing
 
     loop {
-        log::debug!("fetch_block_and_updates {}", block_n);
+        log::info!("Attempt {} for fetching block and updates for block {}", attempt, block_n);
+        let fetch_start = Instant::now(); // Start timing the fetch
+
         let block = fetch_block(provider, block_n);
         let state_update = fetch_state_and_class_update(provider, block_n, overrides, client);
         let (block, state_update) = tokio::join!(block, state_update);
-        log::debug!("fetch_block_and_updates: done {block_n}");
+
+        log::info!("Completed fetch for block {}: {:?}", block_n, fetch_start.elapsed()); // Log time taken for the fetch
 
         match block.as_ref().err().or(state_update.as_ref().err()) {
             Some(L2SyncError::Provider(ProviderError::RateLimited)) => {
-                log::debug!("The fetching process has been rate limited, retrying in {:?} seconds", base_delay);
+                let delay = base_delay * 2_u32.pow(attempt.min(6)); // Exponential backoff with adjustment
+                log::info!("Rate limited on attempt {}, retrying after {:?}", attempt, delay);
                 attempt += 1;
                 if attempt >= MAX_RETRY {
+                    log::info!("Reached maximum retry limit for block {}", block_n);
                     return Err(L2SyncError::FetchRetryLimit);
                 }
-                // Exponential backoff with a cap on the delay
-                let delay = base_delay * 2_u32.pow(attempt - 1).min(6); // Cap to prevent overly long delays
                 tokio::time::sleep(delay).await;
             }
             _ => {
                 let (block, (state_update, class_update)) = (block?, state_update?);
+                log::info!("fetch_block_and_updates completed for block {}: {:?}", block_n, start.elapsed()); // Log total time taken
                 return Ok((block, state_update, class_update));
             }
         }

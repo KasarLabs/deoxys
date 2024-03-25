@@ -145,43 +145,51 @@ pub async fn sync<B, C>(
     );
     let mut last_block_hash = None;
 
-    // TODO: move this somewhere else
     if first_block == 1 {
+        let start_time = Instant::now(); // Début du profiling
+        log::info!("Starting to get state update for genesis block");
+
         let state_update =
             provider.get_state_update(BlockId::Number(0)).await.expect("getting state update for genesis block");
+
         verify_l2(0, &state_update, overrides, bonsai_contract, bonsai_contract_storage, bonsai_class, None)
             .expect("verifying genesis block");
+
+        log::info!("Genesis block state update fetched and verified in {:?}", start_time.elapsed()); // Log le temps passé
     }
 
     let fetch_stream =
         (first_block..).map(|block_n| fetch_block_and_updates(block_n, &provider, overrides, client.as_ref()));
-    // Have 10 fetches in parallel at once, using futures Buffered
     let mut fetch_stream = stream::iter(fetch_stream).buffered(10);
     let (fetch_stream_sender, mut fetch_stream_receiver) = mpsc::channel(10);
 
     let mut instant = Instant::now();
 
     tokio::select!(
-        // fetch blocks and updates in parallel
         _ = async {
-            // FIXME: make it cleaner by replacing this with tokio_util::sync::PollSender to make the channel a
-            // Sink and have the fetch Stream pipe into it
             while let Some(val) = pin!(fetch_stream.next()).await {
+                let start_time = Instant::now(); // Début du profiling pour le fetch
+
                 fetch_stream_sender.send(val).await.expect("receiver is closed");
 
-                // tries to update the pending starknet block every 2s
                 if instant.elapsed() >= Duration::from_secs(2) {
+                    let update_time = Instant::now(); // Profiling pour l'update
+
                     if let Err(e) = update_starknet_data(&provider, client.as_ref()).await {
                         log::error!("Failed to update highest block hash and number: {}", e);
+                    } else {
+                        log::info!("StarkNet data updated in {:?}", update_time.elapsed()); // Log le temps passé
                     }
                     instant = Instant::now();
                 }
             }
         } => {},
-        // apply blocks and updates sequentially
         _ = async {
             let mut block_n = first_block;
             while let Some(val) = pin!(fetch_stream_receiver.recv()).await {
+                let apply_start_time = Instant::now(); // Début du profiling pour l'application
+                log::info!("Starting to import block: {:?}", block_n);
+
                 if matches!(val, Err(L2SyncError::Provider(ProviderError::StarknetError(StarknetError::BlockNotFound)))) {
                     break;
                 }
@@ -235,6 +243,8 @@ pub async fn sync<B, C>(
                 );
 
                 create_block(command_sink, &mut last_block_hash).await.expect("creating block");
+
+                log::info!("Block {block_n} imported in {:?}", apply_start_time.elapsed()); // Log le temps passé
                 block_n += 1;
             }
         } => {},
@@ -288,9 +298,18 @@ pub fn verify_l2<B: BlockT>(
     bonsai_class: &Arc<Mutex<BonsaiStorage<BasicId, BonsaiDb<B>, Poseidon>>>,
     substrate_block_hash: Option<H256>,
 ) -> Result<(), L2SyncError> {
+    let start_time = Instant::now(); // Marque le début de l'exécution de la fonction
+    log::info!("Starting verify_l2 for block {}", block_number);
+
     let state_update_wrapper = StateUpdateWrapper::from(state_update);
 
+    // Démarre le timing pour build_commitment_state_diff
+    let csd_start_time = Instant::now();
     let csd = build_commitment_state_diff(state_update_wrapper.clone());
+    log::info!("build_commitment_state_diff for block {block_number} completed in {:?}", csd_start_time.elapsed());
+
+    // Démarre le timing pour update_state_root
+    let update_state_root_start_time = Instant::now();
     let state_root = update_state_root(
         csd,
         Arc::clone(overrides),
@@ -300,15 +319,21 @@ pub fn verify_l2<B: BlockT>(
         block_number,
         substrate_block_hash,
     );
+    log::info!("update_state_root for {block_number} completed in {:?}", update_state_root_start_time.elapsed());
     log::debug!("state_root: {state_root:?}");
     let block_hash = state_update.block_hash.expect("Block hash not found in state update");
     log::debug!("update_state_root {} -- block_hash: {block_hash:?}, state_root: {state_root:?}", block_number);
 
+    // Timing pour update_l2
+    let update_l2_start_time = Instant::now();
     update_l2(L2StateUpdate {
         block_number,
         global_root: state_root.into(),
         block_hash: Felt252Wrapper::from(block_hash).into(),
     });
+    log::info!("update_l2 for {block_number} completed in {:?}", update_l2_start_time.elapsed());
+
+    log::info!("verify_l2 for {} completed in {:?}", block_number, start_time.elapsed()); // Affiche le temps total passé dans verify_l2
 
     Ok(())
 }
