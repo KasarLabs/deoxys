@@ -253,7 +253,7 @@ fn contract_trie_root<B: BlockT>(
     let start_commit = Instant::now();
     bonsai_contract.commit(BasicId::new(block_number))?;
     let duration_commit = start_commit.elapsed();
-    log::info!("Contract trie root updated for block {}: {:?}", block_number, duration_commit);
+    log::info!("Commit of contract trie root for block {}: {:?}", block_number, duration_commit);
     Ok(bonsai_contract.root_hash(identifier)?.into())
 }
 
