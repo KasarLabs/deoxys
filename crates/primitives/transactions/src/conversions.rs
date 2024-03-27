@@ -1,12 +1,12 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use blockifier::execution::contract_class::ContractClass;
+use blockifier::execution::contract_class::{ClassInfo, ContractClass};
 use blockifier::transaction::objects::TransactionExecutionResult;
 use blockifier::transaction::transactions as btx;
 use mp_felt::Felt252Wrapper;
 use mp_hashers::HasherT;
-use starknet_api::api_core::Nonce;
+use starknet_api::core::Nonce;
 use starknet_api::hash::StarkFelt;
 use starknet_api::transaction as sttx;
 use starknet_api::transaction::{Fee, TransactionVersion};
@@ -26,6 +26,10 @@ impl DeclareTransactionV0 {
     ) -> TransactionExecutionResult<btx::DeclareTransaction> {
         let transaction_hash = self.compute_hash::<H>(chain_id, offset_version, None);
 
+        // TODO: Stop using our custom types
+        // I pass fake values so it don't crash, but will result in unrealistic fees
+        let class_info = ClassInfo::new(&contract_class, 0, 0).unwrap();
+
         btx::DeclareTransaction::new(
             sttx::DeclareTransaction::V0(sttx::DeclareTransactionV0V1 {
                 max_fee: sttx::Fee(self.max_fee),
@@ -35,7 +39,7 @@ impl DeclareTransactionV0 {
                 sender_address: self.sender_address.into(),
             }),
             transaction_hash.into(),
-            contract_class,
+            class_info,
         )
     }
 
@@ -59,6 +63,10 @@ impl DeclareTransactionV1 {
     ) -> TransactionExecutionResult<btx::DeclareTransaction> {
         let transaction_hash = self.compute_hash::<H>(chain_id, offset_version, None);
 
+        // TODO: Stop using our custom types
+        // I pass fake values so it don't crash, but will result in unrealistic fees
+        let class_info = ClassInfo::new(&contract_class, 0, 0).unwrap();
+
         btx::DeclareTransaction::new(
             sttx::DeclareTransaction::V1(sttx::DeclareTransactionV0V1 {
                 max_fee: sttx::Fee(self.max_fee),
@@ -68,7 +76,7 @@ impl DeclareTransactionV1 {
                 sender_address: self.sender_address.into(),
             }),
             transaction_hash.into(),
-            contract_class,
+            class_info,
         )
     }
 
@@ -93,6 +101,10 @@ impl DeclareTransactionV2 {
     ) -> TransactionExecutionResult<btx::DeclareTransaction> {
         let transaction_hash = self.compute_hash::<H>(chain_id, offset_version, None);
 
+        // TODO: Stop using our custom types
+        // I pass fake values so it don't crash, but will result in unrealistic fees
+        let class_info = ClassInfo::new(&contract_class, 0, 0).unwrap();
+
         btx::DeclareTransaction::new(
             sttx::DeclareTransaction::V2(sttx::DeclareTransactionV2 {
                 max_fee: sttx::Fee(self.max_fee),
@@ -103,7 +115,7 @@ impl DeclareTransactionV2 {
                 sender_address: self.sender_address.into(),
             }),
             transaction_hash.into(),
-            contract_class,
+            class_info,
         )
     }
 
@@ -152,6 +164,7 @@ impl InvokeTransactionV0 {
                 calldata: vec_of_felt_to_calldata(&self.calldata),
             }),
             tx_hash: transaction_hash.into(),
+            only_query: offset_version,
         }
     }
 
@@ -183,6 +196,7 @@ impl InvokeTransactionV1 {
                 sender_address: self.sender_address.into(),
             }),
             tx_hash: transaction_hash.into(),
+            only_query: offset_version,
         }
     }
 
@@ -222,22 +236,24 @@ impl DeployAccountTransaction {
             self.compute_hash_given_contract_address::<H>(chain_id.into(), account_address, offset_version).into();
         let contract_address: Felt252Wrapper = account_address.into();
 
+        let tx = sttx::DeployAccountTransaction::V1(sttx::DeployAccountTransactionV1 {
+            max_fee: sttx::Fee(self.max_fee),
+            signature: vec_of_felt_to_signature(&self.signature),
+            nonce: self.nonce.into(),
+            class_hash: self.class_hash.into(),
+            contract_address_salt: self.contract_address_salt.into(),
+            constructor_calldata: vec_of_felt_to_calldata(&self.constructor_calldata),
+        });
+
         btx::DeployAccountTransaction {
-            tx: sttx::DeployAccountTransaction {
-                max_fee: sttx::Fee(self.max_fee),
-                version: sttx::TransactionVersion(StarkFelt::from(1u128)),
-                signature: vec_of_felt_to_signature(&self.signature),
-                nonce: self.nonce.into(),
-                class_hash: self.class_hash.into(),
-                contract_address_salt: self.contract_address_salt.into(),
-                constructor_calldata: vec_of_felt_to_calldata(&self.constructor_calldata),
-            },
+            tx,
             tx_hash: transaction_hash.into(),
             contract_address: contract_address.into(),
+            only_query: offset_version,
         }
     }
 
-    pub fn from_starknet(inner: starknet_api::transaction::DeployAccountTransaction) -> Self {
+    pub fn from_starknet(inner: starknet_api::transaction::DeployAccountTransactionV1) -> Self { //TODO : Check if we can do one that works for both versions
         Self {
             max_fee: inner.max_fee.0,
             signature: inner.signature.0.iter().map(|felt| Felt252Wrapper::from(*felt)).collect(),
