@@ -10,9 +10,11 @@ pub use class_hash::ClassHash;
 pub use compile::ToCompiledClass;
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ContractClassData {
+pub struct ClassInfo {
     pub contract_class: ContractClass,
-    pub block_number: u64,
+    pub compiled_class_hash: Felt,
+    /// None means it is in the pending block
+    pub block_number: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
