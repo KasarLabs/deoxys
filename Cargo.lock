@@ -3343,6 +3343,7 @@ dependencies = [
  "cairo-lang-utils 2.7.0-rc.3",
  "cairo-vm",
  "dp-convert",
+ "dp-hash-chain",
  "flate2",
  "num-bigint",
  "serde",
@@ -3364,6 +3365,13 @@ dependencies = [
  "starknet-types-core",
  "starknet_api",
  "thiserror",
+]
+
+[[package]]
+name = "dp-hash-chain"
+version = "0.1.0"
+dependencies = [
+ "starknet-types-core",
 ]
 
 [[package]]
