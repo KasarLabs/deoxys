@@ -14,6 +14,7 @@ members = [
   "crates/primitives/receipt",
   "crates/primitives/state_update",
   "crates/primitives/utils",
+  "crates/primitives/hash-chain",
 ]
 resolver = "2"
 # All previous except for `starknet-rpc-test` and `starknet-e2e-test`
@@ -32,6 +33,7 @@ default-members = [
   "crates/primitives/receipt",
   "crates/primitives/state_update",
   "crates/primitives/utils",
+  "crates/primitives/hash-chain",
 ]
 
 [profile.dev]
@@ -70,6 +72,7 @@ bonsai-trie = { default-features = false, git = "https://github.com/cchudant/bon
 # Deoxys primtitives
 dp-block = { path = "crates/primitives/block", default-features = false }
 dp-convert = { path = "crates/primitives/convert", default-features = false }
+dp-hash-chain = { path = "crates/primitives/hash-chain", default-features = false }
 dp-transactions = { path = "crates/primitives/transactions", default-features = false }
 dp-class = { path = "crates/primitives/class", default-features = false }
 dp-receipt = { path = "crates/primitives/receipt", default-features = false }
@@ -133,8 +136,8 @@ primitive-types = "0.12"
 rand = "0.8"
 reqwest = { version = "0.12", features = ["json"] }
 rstest = "0.18"
-serde = { version = "1.0", default-features = false, features = ["std"] }
-serde_json = { version = "1.0", default-features = false, features = ["std"] }
+serde = { version = "1.0.192", default-features = false, features = ["std"] }
+serde_json = { version = "1.0.105", default-features = false, features = ["std", "arbitrary_precision", "raw_value"] }
 serde_with = { version = "2.3", default-features = false }
 thiserror = "1.0"
 thiserror-no-std = "2.0"
@@ -147,8 +150,8 @@ prometheus = "0.13.4"
 fdlimit = "0.3.0"
 
 [patch.crates-io]
-starknet-core = { git = "https://github.com/kasarlabs/starknet-rs.git", branch = "fork" }
-starknet-providers = { git = "https://github.com/kasarlabs/starknet-rs.git", branch = "fork" }
+starknet-core = { git = "https://github.com/tdelabro/starknet-rs.git", branch = "fix-class-hash" }
+starknet-providers = { git = "https://github.com/tdelabro/starknet-rs.git", branch = "fix-class-hash" }
 
 # wait for PR https://github.com/starknet-io/types-rs/pull/76 to be merged
 starknet-types-core = { git = "https://github.com/jbcaron/types-rs.git", rev = "fd0e062" }
