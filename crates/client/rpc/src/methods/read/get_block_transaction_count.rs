@@ -28,3 +28,30 @@ pub fn get_block_transaction_count(starknet: &Starknet, block_id: BlockId) -> St
 
     Ok(tx_count as _)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::{make_sample_chain_1, open_testing, SampleChain1};
+    use rstest::rstest;
+    use starknet_core::types::BlockTag;
+
+    #[rstest]
+    fn test_get_block_transaction_count() {
+        let (backend, rpc) = open_testing();
+        let SampleChain1 { block_hashes, .. } = make_sample_chain_1(&backend);
+
+        // Block 0
+        assert_eq!(get_block_transaction_count(&rpc, BlockId::Number(0)).unwrap(), 1);
+        assert_eq!(get_block_transaction_count(&rpc, BlockId::Hash(block_hashes[0])).unwrap(), 1);
+        // Block 1
+        assert_eq!(get_block_transaction_count(&rpc, BlockId::Number(1)).unwrap(), 0);
+        assert_eq!(get_block_transaction_count(&rpc, BlockId::Hash(block_hashes[1])).unwrap(), 0);
+        // Block 2
+        assert_eq!(get_block_transaction_count(&rpc, BlockId::Number(2)).unwrap(), 2);
+        assert_eq!(get_block_transaction_count(&rpc, BlockId::Hash(block_hashes[2])).unwrap(), 2);
+        assert_eq!(get_block_transaction_count(&rpc, BlockId::Tag(BlockTag::Latest)).unwrap(), 2);
+        // Pending
+        assert_eq!(get_block_transaction_count(&rpc, BlockId::Tag(BlockTag::Pending)).unwrap(), 1);
+    }
+}
