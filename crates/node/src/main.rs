@@ -5,23 +5,21 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use clap::Parser;
-
 mod cli;
 mod service;
 mod util;
 
+use crate::service::L1SyncService;
 use cli::RunCmd;
 use dc_db::DatabaseService;
-use dc_mempool::{L1DataProvider, Mempool};
+use dc_mempool::{GasPriceProvider, L1DataProvider, Mempool};
 use dc_metrics::MetricsService;
 use dc_rpc::providers::AddTransactionProvider;
 use dc_telemetry::{SysInfo, TelemetryService};
-use dp_block::header::{GasPrices, L1DataAvailabilityMode};
 use dp_convert::ToFelt;
 use dp_utils::service::{Service, ServiceGroup};
 use service::{BlockProductionService, RpcService, SyncService};
 use starknet_providers::SequencerGatewayProvider;
-
 const GREET_IMPL_NAME: &str = "Deoxys";
 const GREET_SUPPORT_URL: &str = "https://github.com/KasarLabs/deoxys/issues";
 const GREET_AUTHORS: &[&str] = &["KasarLabs <https://kasar.io>"];
@@ -74,29 +72,25 @@ async fn main() -> anyhow::Result<()> {
     .await
     .context("Initializing db service")?;
 
+    let l1_data_provider: Arc<dyn L1DataProvider> = Arc::new(GasPriceProvider::new());
+
+    let l1_service = L1SyncService::new(
+        &run_cmd.l1_sync_params,
+        &db_service,
+        prometheus_service.registry(),
+        Arc::clone(&l1_data_provider),
+        run_cmd.sync_params.network.chain_id(),
+        run_cmd.sync_params.network.l1_core_address(),
+    )
+    .await
+    .context("Initializing the l1 sync service")?;
+
     // Block provider startup.
     // `rpc_add_txs_method_provider` is a trait object that tells the RPC task where to put the transactions when using the Write endpoints.
     let (block_provider_service, rpc_add_txs_method_provider): (_, Arc<dyn AddTransactionProvider>) =
         match run_cmd.authority {
             // Block production service. (authority)
             true => {
-                struct DummyProvider;
-                impl L1DataProvider for DummyProvider {
-                    fn get_gas_prices(&self) -> GasPrices {
-                        GasPrices {
-                            eth_l1_gas_price: 100,
-                            strk_l1_gas_price: 90,
-                            eth_l1_data_gas_price: 10,
-                            strk_l1_data_gas_price: 9,
-                        }
-                    }
-                    fn get_da_mode(&self) -> L1DataAvailabilityMode {
-                        L1DataAvailabilityMode::Blob
-                    }
-                }
-
-                let l1_data_provider: Arc<dyn L1DataProvider> = Arc::new(DummyProvider);
-
                 let mempool = Arc::new(Mempool::new(Arc::clone(db_service.backend()), Arc::clone(&l1_data_provider)));
 
                 let block_production_service = BlockProductionService::new(
@@ -155,6 +149,7 @@ async fn main() -> anyhow::Result<()> {
 
     let app = ServiceGroup::default()
         .with(db_service)
+        .with(l1_service)
         .with(block_provider_service)
         .with(rpc_service)
         .with(telemetry_service)
