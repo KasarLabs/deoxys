@@ -56,7 +56,11 @@ pub mod starknet_sync_worker {
             None => provider,
         };
 
-        let l1_fut = async { dc_eth::state_update::sync(backend, &eth_client, chain_id).await };
+        let state_update_fut = async { dc_eth::state_update::sync(backend, &eth_client, chain_id).await };
+        let l1_fut = async {
+            tokio::try_join!(state_update_fut)?;
+            Ok(())
+        };
 
         tokio::try_join!(
             l1_fut,
