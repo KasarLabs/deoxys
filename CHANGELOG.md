@@ -2,6 +2,8 @@
 
 ## Next release
 
+- testing: add e2e tests for the node
+- fix: pending contract storage not stored properly
 - feat: experimental block production and mempool
 - refactor: L1BlockMetric is intialized inside the EthereumClient new function
 - refactor: BlockMetrics divided in L1BlockMetrics and BlockMetrics

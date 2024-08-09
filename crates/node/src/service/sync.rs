@@ -1,4 +1,4 @@
-use crate::cli::SyncParams;
+use crate::cli::{NetworkType, SyncParams};
 use alloy::primitives::Address;
 use anyhow::Context;
 use dc_db::db_metrics::DbMetrics;
@@ -8,6 +8,7 @@ use dc_metrics::MetricsRegistry;
 use dc_sync::fetch::fetchers::FetchConfig;
 use dc_sync::metrics::block_metrics::BlockMetrics;
 use dc_telemetry::TelemetryHandle;
+use dp_block::chain_config::ChainConfig;
 use dp_utils::service::Service;
 use std::sync::Arc;
 use std::time::Duration;
@@ -18,7 +19,7 @@ pub struct SyncService {
     db_backend: Arc<DeoxysBackend>,
     fetch_config: FetchConfig,
     backup_every_n_blocks: Option<u64>,
-    eth_client: EthereumClient,
+    eth_client: Option<EthereumClient>,
     starting_block: Option<u64>,
     block_metrics: BlockMetrics,
     db_metrics: DbMetrics,
@@ -30,6 +31,8 @@ pub struct SyncService {
 impl SyncService {
     pub async fn new(
         config: &SyncParams,
+        chain_config: Arc<ChainConfig>,
+        network: NetworkType,
         db: &DatabaseService,
         metrics_handle: MetricsRegistry,
         telemetry: TelemetryHandle,
@@ -37,24 +40,39 @@ impl SyncService {
         // TODO: create l1 metrics here
         let block_metrics = BlockMetrics::register(&metrics_handle)?;
         let db_metrics = DbMetrics::register(&metrics_handle)?;
-        let fetch_config = config.block_fetch_config();
-
-        let l1_endpoint = if !config.sync_l1_disabled {
-            if let Some(l1_rpc_url) = &config.l1_endpoint {
-                Some(l1_rpc_url.clone())
+        let fetch_config = FetchConfig {
+            gateway: network.gateway(),
+            feeder_gateway: network.feeder_gateway(),
+            chain_id: chain_config.chain_id.clone(),
+            sound: false,
+            l1_core_address: chain_config.eth_core_contract_address,
+            verify: !config.disable_root,
+            api_key: config.gateway_key.clone(),
+            sync_polling_interval: if config.no_sync_polling {
+                None
             } else {
-                return Err(anyhow::anyhow!(
-                    "❗ No L1 endpoint provided. You must provide one in order to verify the synced state."
-                ));
+                Some(Duration::from_secs(config.sync_polling_interval))
+            },
+            n_blocks_to_sync: config.n_blocks_to_sync,
+            sync_l1_disabled: config.sync_l1_disabled,
+        };
+
+        let eth_client = if !config.sync_l1_disabled {
+            if let Some(l1_rpc_url) = &config.l1_endpoint {
+                let core_address = Address::from_slice(chain_config.eth_core_contract_address.as_bytes());
+                Some(
+                    EthereumClient::new(l1_rpc_url.clone(), core_address, metrics_handle)
+                        .await
+                        .context("Creating ethereum client")?,
+                )
+            } else {
+                anyhow::bail!(
+                    "No Ethereum endpoint provided. You need to provide one using --l1-endpoint <RPC URL> in order to verify the synced state or disable the l1 watcher using --no-l1-sync."
+                );
             }
         } else {
             None
         };
-
-        let core_address = Address::from_slice(config.network.l1_core_address().as_bytes());
-        let eth_client = EthereumClient::new(l1_endpoint.unwrap(), core_address, metrics_handle)
-            .await
-            .context("Creating ethereum client")?;
 
         Ok(Self {
             db_backend: Arc::clone(db.backend()),
